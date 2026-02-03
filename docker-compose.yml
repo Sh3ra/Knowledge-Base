@@ -1,0 +1,23 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    depends_on:
+      qdrant:
+        condition: service_started
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+      - ./logs:/app/logs
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.1
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  qdrant_data:

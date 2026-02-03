@@ -1,0 +1,17 @@
+# Environment
+.venv/
+venv/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Logs
+logs/
+
+# IDE
+.idea/
+.vscode/
