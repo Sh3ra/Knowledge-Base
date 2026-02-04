@@ -32,6 +32,7 @@ class SearchResponse(BaseModel):
     """Search endpoint response."""
 
     results: list[SearchResult]
+    message: str | None = None  # Set when no results (e.g. "No relevant documents found.")
 
 
 class IngestResponse(BaseModel):

@@ -24,6 +24,9 @@ TOP_K_MAX = 20
 _top_k_raw = int(os.getenv("TOP_K", "5"))
 TOP_K = max(1, min(_top_k_raw, TOP_K_MAX))
 
+# Minimum quality: only return results with score (distance) <= this; cosine range [0, 2], lower = better, 2.0 = no filter
+SEARCH_SCORE_THRESHOLD = float(os.getenv("SEARCH_SCORE_THRESHOLD", "1.5"))
+
 # Vector DB
 QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))

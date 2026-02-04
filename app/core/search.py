@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from app.config import TOP_K
+from app.config import SEARCH_SCORE_THRESHOLD, TOP_K
 from app.models import SearchResult
 
 logger = logging.getLogger(__name__)
@@ -21,10 +21,13 @@ def search_vectorstore(
     hits = vectorstore.similarity_search_with_score(query, k=k)
     results = []
     for doc, score in hits:
+        score_f = float(score)
+        if score_f > SEARCH_SCORE_THRESHOLD:
+            continue
         results.append(
             SearchResult(
                 document=doc.metadata.get("source", "unknown"),
-                score=round(float(score), 2),
+                score=round(score_f, 2),
                 content=doc.page_content,
             )
         )

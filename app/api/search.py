@@ -33,4 +33,5 @@ async def search(
 
     q_preview = query[:80] + "..." if len(query) > 80 else query
     logger.info("POST /search/ query=%r results=%d", q_preview, len(results))
-    return SearchResponse(results=results)
+    message = "No relevant documents found." if not results else None
+    return SearchResponse(results=results, message=message)

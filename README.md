@@ -188,6 +188,7 @@ Variables are read from `.env` (and from `docker-compose` env_file for the app).
 | `CHUNK_SIZE` | `500` | Chunk size in characters. |
 | `CHUNK_OVERLAP` | `50` | Overlap between chunks. |
 | `TOP_K` | `5` | Number of search results per query (capped at 20). |
+| `SEARCH_SCORE_THRESHOLD` | `1.5` | Only return results with score (distance) ≤ this; cosine range [0, 2], lower is better; 2.0 = no filter. |
 | `QDRANT_HOST` | `qdrant` | Qdrant host (use `qdrant` in Docker). |
 | `QDRANT_PORT` | `6333` | Qdrant port. |
 
