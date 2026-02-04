@@ -24,7 +24,6 @@ class SearchResult(BaseModel):
     """Single search result item."""
 
     document: str
-    score: float
     content: str
 
 

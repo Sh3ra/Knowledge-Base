@@ -141,7 +141,6 @@ def test_search_query():
     assert isinstance(body["results"], list)
     if len(body["results"]) > 0:
         assert "document" in body["results"][0]
-        assert "score" in body["results"][0]
         assert "content" in body["results"][0]
 
 

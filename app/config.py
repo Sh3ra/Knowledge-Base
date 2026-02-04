@@ -24,8 +24,8 @@ TOP_K_MAX = 20
 _top_k_raw = int(os.getenv("TOP_K", "5"))
 TOP_K = max(1, min(_top_k_raw, TOP_K_MAX))
 
-# Minimum quality: only return results with score (distance) <= this; cosine range [0, 2], lower = better, 2.0 = no filter
-SEARCH_SCORE_THRESHOLD = float(os.getenv("SEARCH_SCORE_THRESHOLD", "1.5"))
+# Minimum similarity score: only return results with similarity >= this; cosine similarity in [-1, 1], default 0.0 = accept all with non-negative similarity
+MIN_SIMILARITY_SCORE = float(os.getenv("MIN_SIMILARITY_SCORE", "0.0"))
 
 # Vector DB
 QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
