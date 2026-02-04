@@ -13,7 +13,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/search", tags=["search"])
 
 
-@router.post("/", response_model=SearchResponse)
+@router.post(
+    "/",
+    response_model=SearchResponse,
+    responses={
+        200: {"description": "Search results (or empty with message if no match)."},
+        400: {"description": "Bad Request. Query is empty or whitespace-only."},
+        500: {"description": "Internal Server Error. Search processing failed."},
+    },
+)
 async def search(
     req: SearchRequest,
     vectorstore=Depends(get_vectorstore),

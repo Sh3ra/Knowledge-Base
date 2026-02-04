@@ -271,6 +271,7 @@ Knowledge-Base/
 | **In-memory job status** | Ingest job status is stored in process memory; lost on restart. No persistence of job history. |
 | **No deletion API** | No endpoint to delete documents or clear the collection; use a fresh Qdrant volume or re-deploy. |
 | **Upload size** | Max 50 MB per file (configurable via `MAX_UPLOAD_SIZE` in code). |
+| **Max files per request** | 10 files per ingest request (file upload or directory; `MAX_FILES_PER_UPLOAD` in code). |
 | **Directory path** | Directory ingest only allows paths under `INGEST_DATA_PATH` (default `/data`) to prevent path traversal. |
 | **Concurrency** | At most 4 background ingest jobs at a time (semaphore). Thread pool of 4 for CPU-bound PDF work. |
 | **Jina dependency** | Requires valid Jina API key and network access to Jina; no offline embedding option. |

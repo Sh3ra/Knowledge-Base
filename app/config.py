@@ -35,8 +35,9 @@ COLLECTION_NAME = "pdf_chunks"
 # Directory path for ingest (must be inside container)
 INGEST_DATA_PATH = "/data"
 
-# Max upload size (50 MB)
+# Max upload size (50 MB) and max files per request
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024
+MAX_FILES_PER_UPLOAD = 10
 
 # Log file
 LOG_FILE = str(Path(__file__).resolve().parent.parent / "logs" / "app.log")
