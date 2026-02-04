@@ -26,15 +26,15 @@ A fully containerized API that ingests PDF documents, chunks them with LangChain
 |--------|-------------|
 | **PDF ingestion** | Accept single/multiple PDF uploads or a directory path. Only PDFs are accepted. |
 | **Async ingest** | Returns 202 Accepted immediately; chunking and embedding run in background. Poll job status to know when done. |
-| **Directory ingest** | Send path `input=/data` to ingest all PDFs from the project `data/` folder (mounted at `/data` in the container). |
-| **Semantic search** | POST a query; returns top-k chunks ranked by cosine similarity (embeddings). |
-| **LangChain integration** | Document loading (PDF → `Document`), `RecursiveCharacterTextSplitter` for chunking, LangChain Qdrant vectorstore and Jina embeddings. |
+| **Directory ingest** | Send path `input=/data` to ingest PDFs from the project `data/` folder (mounted at `/data`). Limited to max files per request (see Configuration). |
+| **Semantic search** | POST a query; returns up to top-k chunks that meet the minimum similarity threshold (LangChain retriever). |
+| **LangChain integration** | Document loading (PDF → `Document`), `RecursiveCharacterTextSplitter` for chunking, Qdrant vectorstore and Jina embeddings; search via `SimilarityScoreThresholdRetriever`. |
 | **Chunking** | Configurable chunk size and overlap (env). Splits on paragraph/sentence boundaries when possible. |
 | **Embeddings** | Jina AI `jina-embeddings-v3` (1024-dim) via API; no local model. |
 | **Vector store** | Qdrant with cosine similarity; single collection `pdf_chunks`. |
 | **OpenAPI docs** | Interactive docs at `/docs`. |
-| **Config via env** | Jina key, chunking, TOP_K, Qdrant host/port from `.env`.|
-| **Tests in container** | Functional test suite runs inside the app container.|
+| **Config via env** | Jina key, chunking, TOP_K, minimum similarity score, max files, Qdrant host/port from `.env`. |
+| **Tests in container** | Functional test suite runs inside the app container. |
 
 ---
 
@@ -50,7 +50,7 @@ A fully containerized API that ingests PDF documents, chunks them with LangChain
 ```bash
 # 1. Environment
 cp .env.example .env
-# Edit .env and set JINA_API_KEY=your_key
+# Edit .env and set JINA_API_KEY to your own Jina API key
 
 # 2. Start stack (API + Qdrant)
 ./orchestrate.sh --action start
@@ -60,23 +60,23 @@ cp .env.example .env
 # 3. Ingest one file
 curl -X POST "http://localhost:8000/ingest/" -F "input=@data/sample.pdf"
 
-# 3b. Ingest multiple files
+# 4. Ingest multiple files (optional)
 curl -X POST "http://localhost:8000/ingest/" \
   -F "input=@data/sample.pdf" \
   -F "input=@data/sample2.pdf"
 
-# 4. Ingest entire data directory (/data is the project's data/ folder)
+# 5. Ingest entire data directory (optional; /data is the project's data/ folder)
 curl -X POST "http://localhost:8000/ingest/" -F "input=/data"
 
-# 5. Check job status (use job_id from step 3 or 4)
+# 6. Check job status (use job_id from step 3, 4, or 5)
 curl "http://localhost:8000/ingest/status/{job_id}"
 
-# 6. Search
+# 7. Search
 curl -X POST "http://localhost:8000/search/" \
   -H "Content-Type: application/json" \
   -d '{"query": "How does semantic search work?"}'
 
-# 7. Stop and remove containers/volumes
+# 8. Stop and remove containers/volumes
 ./orchestrate.sh --action terminate
 ```
 
@@ -120,6 +120,7 @@ curl -X POST "http://localhost:8000/search/" \
 | Documents | LangChain `Document` (metadata: `source` = filename) |
 | Embeddings | LangChain `JinaEmbeddings` → Jina AI API (jina-embeddings-v3, 1024 dim) |
 | Vector store | LangChain `Qdrant` (wraps qdrant-client), cosine similarity |
+| Retrieval | LangChain `SimilarityScoreThresholdRetriever` (min similarity threshold, top-k) |
 | Vector DB | Qdrant v1.12.1 (Docker), persistent volume |
 
 ### Concurrency and resources
@@ -139,8 +140,8 @@ curl -X POST "http://localhost:8000/search/" \
    - A single string `input=/data` (directory path).
 
 2. **Validation (sync)**
-   - Files: check PDF extension, size ≤ 50 MB, read body.
-   - Directory: resolve path under `INGEST_DATA_PATH`, list PDFs, read bytes.
+   - Files: check PDF extension, size ≤ max upload (50 MB), max files per request (10), read body.
+   - Directory: resolve path under `INGEST_DATA_PATH`, list PDFs (same max files), read bytes.
 
 3. **Response**
    Return **202 Accepted** with `job_id`, `message`, and `files` list.
@@ -168,10 +169,10 @@ curl -X POST "http://localhost:8000/search/" \
    LangChain vectorstore embeds the query (Jina API, query task).
 
 4. **Search**
-   `vectorstore.similarity_search_with_score(query, k=TOP_K)` (default TOP_K=5).
+   LangChain `SimilarityScoreThresholdRetriever` with `score_threshold=MIN_SIMILARITY_SCORE` and `k=TOP_K`. Only documents with similarity ≥ minimum are returned.
 
 5. **Response**
-   JSON list of `{document, score, content}` (document = source filename, content = chunk text).
+   JSON `{ "results": [ { "document", "content" }, ... ], "message": null }`. When no results pass the minimum similarity threshold, `results` is empty and `message` is `"No relevant documents found."`
 
 ---
 
@@ -188,7 +189,7 @@ Variables are read from `.env` (and from `docker-compose` env_file for the app).
 | `CHUNK_SIZE` | `500` | Chunk size in characters. |
 | `CHUNK_OVERLAP` | `50` | Overlap between chunks. |
 | `TOP_K` | `5` | Number of search results per query (capped at 20). |
-| `SEARCH_SCORE_THRESHOLD` | `1.5` | Only return results with score (distance) ≤ this; cosine range [0, 2], lower is better; 2.0 = no filter. |
+| `MIN_SIMILARITY_SCORE` | `0.0` | Minimum similarity score; only return results with similarity ≥ this. Cosine similarity in [-1, 1]; 0.0 = accept all with non-negative similarity. |
 | `QDRANT_HOST` | `qdrant` | Qdrant host (use `qdrant` in Docker). |
 | `QDRANT_PORT` | `6333` | Qdrant port. |
 
@@ -204,12 +205,12 @@ Variables are read from `.env` (and from `docker-compose` env_file for the app).
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/ingest/` | Submit PDF file(s) or directory path. Body: multipart form, field `input` = file(s) or string path. Returns 202 + `job_id`. |
+| POST | `/ingest/` | Submit PDF file(s) or directory path. Body: multipart form, field `input` = file(s) or string path. Returns 202 + `job_id`, `message`, `files`. If directory has no PDFs, `job_id` is null. |
 | GET | `/ingest/status/{job_id}` | Get ingest job status: `pending` → `processing` → `completed` or `failed`. |
-| POST | `/search/` | Semantic search. Body: JSON `{"query": "..."}`. Returns `{ "results": [ { "document", "score", "content" }, ... ] }`. |
+| POST | `/search/` | Semantic search. Body: JSON `{"query": "..."}`. Returns `{ "results": [ { "document", "content" }, ... ], "message": null }`. When no results, `message` is `"No relevant documents found."` |
 
-- **Errors:** 400 (validation), 404 (job not found), 500 (server error).
-- Interactive API docs (Swagger UI) are available at http://localhost:8000/docs when the app is running.
+- **Errors:** 400 (bad request), 404 (job not found), 422 (request validation), 500 (server error).
+- **Interactive docs:** Swagger UI at http://localhost:8000/docs when the app is running.
 
 ---
 
@@ -223,7 +224,7 @@ With the stack running (`./orchestrate.sh --action start`):
 docker compose exec app pytest tests/suite.py -v
 ```
 
-Tests hit `http://localhost:8000` (from inside the container that is the same process as the API). They cover: single ingest, search, reject non-PDF, reject missing input, reject empty/whitespace query, and concurrent uploads (3 at a time for stability).
+Tests hit `http://localhost:8000` from inside the container. They cover: single and multiple ingest, directory ingest (path and invalid path), empty path, too many files (11), status 404, job status shape, search (results with `document` and `content`) and no-results fallback message, reject non-PDF, reject missing input, reject empty/whitespace query, and concurrent uploads.
 
 ---
 
@@ -240,17 +241,19 @@ Knowledge-Base/
 ├── app/
 │   ├── main.py              # FastAPI app, lifespan (wire infrastructure + api routers)
 │   ├── config.py            # Env and constants (chunk, search, Qdrant, Jina)
-│   ├── models.py            # Pydantic: SearchRequest, SearchResult, IngestResponse, JobStatusResponse
+│   ├── logging_config.py    # configure_logging() — stdout + optional log file
+│   ├── models.py            # Pydantic: SearchRequest, SearchResult (document, content), IngestResponse, JobStatus, JobStatusResponse
 │   ├── core/                # Domain logic (no HTTP)
 │   │   ├── ingest.py        # PDF → text, Document, split_documents, get_pdf_files_from_directory
-│   │   ├── search.py        # search_vectorstore(vectorstore, query, k)
-│   │   └── embeddings.py   # get_jina_embeddings() (LangChain JinaEmbeddings)
+│   │   ├── search.py        # search_vectorstore via SimilarityScoreThresholdRetriever
+│   │   └── embeddings.py    # get_jina_embeddings() (LangChain JinaEmbeddings)
 │   ├── infrastructure/      # Qdrant client, collection, vectorstore
 │   │   └── vectorstore.py  # get_qdrant_client, ensure_collection, create_vectorstore
 │   ├── services/
 │   │   └── ingest_service.py  # run_background_ingest (semaphore, executor, vectorstore.add_documents)
 │   └── api/                 # HTTP layer (routes + dependencies)
 │       ├── dependencies.py   # get_vectorstore, get_job_status_store
+│       ├── ingest_helpers.py # parse_input_fields, files_from_directory, files_from_uploads, check_max_files
 │       ├── ingest.py         # POST /ingest/, GET /ingest/status/{job_id}
 │       └── search.py         # POST /search/
 ├── data/                    # Mounted as /data in container; put PDFs here for directory ingest
@@ -276,7 +279,7 @@ Knowledge-Base/
 | **Concurrency** | At most 4 background ingest jobs at a time (semaphore). Thread pool of 4 for CPU-bound PDF work. |
 | **Jina dependency** | Requires valid Jina API key and network access to Jina; no offline embedding option. |
 | **No observability** | LangSmith is not available; no tracing or observability for LangChain (chunking, embeddings, vector store) calls. |
-| **Single process** | One uvicorn process; under heavy concurrent load (e.g. many simultaneous ingest + search) connections may reset (mitigated by semaphore and moderate test concurrency). |
+| **Single process** | One uvicorn process; under heavy concurrent load (e.g. many simultaneous ingest + search) connections may reset (mitigated by semaphore). |
 
 ---
 
@@ -285,4 +288,4 @@ Knowledge-Base/
 - **Features:** Async PDF ingest (file or directory), LangChain chunking + Jina embeddings + Qdrant, semantic search, config via env, tests in container.
 - **Limitations:** PDF-focused, single collection, no auth, in-memory job status, no delete API, Jina and network required, single process.
 - **Architecture:** FastAPI + LangChain (splitter, Document, JinaEmbeddings, Qdrant) + PyMuPDF + Qdrant; background ingest with semaphore and thread pool.
-- **Flow:** Ingest = validate → 202 + job_id → background: extract → Document → split → embed → upsert; Search = embed query → similarity_search_with_score → return top-k.
+- **Flow:** Ingest = validate → 202 + job_id → background: extract → Document → split → embed → upsert; Search = embed query → SimilarityScoreThresholdRetriever → return top-k.
